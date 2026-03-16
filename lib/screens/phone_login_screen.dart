@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'auth_wrapper.dart';
 
 class _Colors {
   static const primary = Color(0xFFEC5B13);
@@ -67,7 +67,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     });
 
     try {
-      await AuthService.sendOtp(
+      final res = await AuthService.sendOtp(
         target: phone,
         channel: 'sms',
         purpose: 'login',
@@ -77,6 +77,16 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
           _otpSent = true;
           _sendingOtp = false;
         });
+        // Modo desarrollo: backend devuelve dev_code cuando OTP_PROVIDER=local
+        final devCode = res['dev_code']?.toString();
+        if (devCode != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Código OTP (dev): $devCode'),
+              duration: const Duration(seconds: 10),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -102,7 +112,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
 
     if (mounted && success) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const AuthWrapper()),
         (route) => false,
       );
     } else if (mounted && auth.error != null) {
@@ -174,7 +184,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
 
               if (mounted && success) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  MaterialPageRoute(builder: (_) => const AuthWrapper()),
                   (route) => false,
                 );
               }

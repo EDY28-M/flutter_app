@@ -48,7 +48,8 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
 
   Future<void> _addToCart(Map<String, dynamic> item) async {
     final id = item['id'] as String?;
-    if (id == null || _addingIds[id] == true) return;
+    final bciId = item['branch_catalog_item_id'] as String?;
+    if (id == null || bciId == null || _addingIds[id] == true) return;
 
     setState(() => _addingIds[id] = true);
     try {
@@ -56,7 +57,7 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
         storeId: widget.storeId,
         branchId: widget.branchId,
         catalogItemId: id,
-        branchCatalogItemId: item['branch_catalog_item_id'] as String,
+        branchCatalogItemId: bciId,
         variantId: (item['variant'] as Map?)?['id'] as String?,
         qty: 1,
       );
@@ -129,6 +130,7 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
                     itemBuilder: (_, i) => _ProductCard(
                       item: _items[i],
                       isAdding: _addingIds[_items[i]['id']] ?? false,
+                      canAdd: _items[i]['branch_catalog_item_id'] != null,
                       onAdd: () => _addToCart(_items[i]),
                     ),
                   ),
@@ -140,11 +142,13 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
 class _ProductCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool isAdding;
+  final bool canAdd;
   final VoidCallback onAdd;
 
   const _ProductCard({
     required this.item,
     required this.isAdding,
+    required this.canAdd,
     required this.onAdd,
   });
 
@@ -155,6 +159,8 @@ class _ProductCard extends StatelessWidget {
     final price = (item['price'] as num?)?.toDouble() ?? 0.0;
     final description = item['description'] as String?;
     final variant = item['variant'] as Map?;
+    final isOnOffer = item['is_on_offer'] as bool? ?? false;
+    final offerPrice = (item['offer_price_amount'] as num?)?.toDouble();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -173,7 +179,7 @@ class _ProductCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: isAdding ? null : onAdd,
+          onTap: (isAdding || !canAdd) ? null : onAdd,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -243,16 +249,48 @@ class _ProductCard extends StatelessWidget {
                           ),
                         ),
                       const SizedBox(height: 8),
+                      if (isOnOffer) ...[  
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'OFERTA',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'S/ ${price.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: AppColors.primary,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (isOnOffer && offerPrice != null && offerPrice < price)
+                                Text(
+                                  'S/ ${price.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.slate400,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              Text(
+                                'S/ ${(isOnOffer && offerPrice != null ? offerPrice : price).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
                           ),
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
@@ -271,25 +309,27 @@ class _ProductCard extends StatelessWidget {
                                 : Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary,
+                                      color: canAdd ? AppColors.primary : Colors.grey.shade300,
                                       borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.primary.withOpacity(0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
+                                      boxShadow: canAdd
+                                          ? [
+                                              BoxShadow(
+                                                color: AppColors.primary.withOpacity(0.3),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
                                     ),
-                                    child: const Row(
+                                    child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.add, color: Colors.white, size: 20),
-                                        SizedBox(width: 4),
+                                        Icon(Icons.add, color: canAdd ? Colors.white : Colors.grey.shade600, size: 20),
+                                        const SizedBox(width: 4),
                                         Text(
-                                          'Agregar',
+                                          canAdd ? 'Agregar' : 'No disponible',
                                           style: TextStyle(
-                                            color: Colors.white,
+                                            color: canAdd ? Colors.white : Colors.grey.shade600,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
                                           ),

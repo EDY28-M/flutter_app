@@ -15,9 +15,9 @@ class AppConfig {
 
   /// ngrok: URL pública para que cualquiera se conecte (sin estar en tu red)
   /// 1. Pon useNgrok = true
-  /// 2. Pega tu URL de ngrok en apiBaseUrlNgrok (ej: https://abc123.ngrok-free.app)
-  static const bool useNgrok = true;
-  static const String apiBaseUrlNgrok = 'https://19f7-38-250-181-92.ngrok-free.app';
+  /// 2. Pega tu URL de ngrok en apiBaseUrlNgrok (cambia cada vez que reinicias ngrok)
+  static const bool useNgrok = false;
+  static const String apiBaseUrlNgrok = 'https://8f83-190-43-252-228.ngrok-free.app';
 
   /// Prioridad: ngrok > emulador/dispositivo
   static String get apiBaseUrl =>

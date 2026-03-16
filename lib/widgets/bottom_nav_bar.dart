@@ -18,6 +18,7 @@ class BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 72),
       padding: const EdgeInsets.only(top: 8, bottom: 24),
       decoration: BoxDecoration(
         color: Colors.white,

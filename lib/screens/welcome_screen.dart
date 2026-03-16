@@ -8,7 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/auth_provider.dart';
 import 'phone_login_screen.dart';
 import 'email_login_screen.dart';
-import 'home_screen.dart';
+import 'auth_wrapper.dart';
 
 class _AppColors {
   static const primary = Color(0xFFEC5B13);
@@ -231,7 +231,7 @@ class WelcomeScreen extends StatelessWidget {
     final auth = context.read<AuthProvider>();
     final success = await auth.signInWithGoogle();
     if (context.mounted && success) {
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AuthWrapper()));
     }
   }
 

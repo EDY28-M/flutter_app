@@ -40,6 +40,26 @@ class StoreService {
     return null;
   }
 
+  static Future<List<Map<String, dynamic>>> getOffers() async {
+    final res = await ApiClient.get('/api/stores/offers');
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final list = data is List ? data : (data['data'] as List? ?? []);
+      return List<Map<String, dynamic>>.from(list);
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductsByCategory(String categoryCode) async {
+    final res = await ApiClient.get('/api/stores/products/by-category/$categoryCode');
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final list = data is List ? data : (data['data'] as List? ?? []);
+      return List<Map<String, dynamic>>.from(list);
+    }
+    return [];
+  }
+
   static Future<List<Map<String, dynamic>>> getCatalogItems(
     String storeId,
     String branchId,

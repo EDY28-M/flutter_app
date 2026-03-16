@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import 'home_screen.dart';
+import 'auth_wrapper.dart';
 
 class _Colors {
   static const primary = Color(0xFFEC5B13);
@@ -51,7 +51,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       );
       if (mounted && success) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
           (route) => false,
         );
       }
@@ -62,7 +62,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       );
       if (mounted && success) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
           (route) => false,
         );
       }

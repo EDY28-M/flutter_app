@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../providers/auth_provider.dart';
 import 'addresses_screen.dart';
-import 'welcome_screen.dart';
+import 'auth_wrapper.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -218,7 +218,7 @@ class ProfileScreen extends StatelessWidget {
     await auth.signOut();
     if (context.mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+        MaterialPageRoute(builder: (_) => const AuthWrapper()),
         (route) => false,
       );
     }
