@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../services/order_service.dart';
 
@@ -54,10 +53,13 @@ class _OrdersScreenState extends State<OrdersScreen>
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.maybePop(context),
-        ),
+        automaticallyImplyLeading: false,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         title: const Text(
           'Pedidos',
           style: TextStyle(
@@ -72,7 +74,10 @@ class _OrdersScreenState extends State<OrdersScreen>
           unselectedLabelColor: AppColors.slate500,
           indicatorColor: AppColors.primary,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
           tabs: const [
             Tab(text: 'En Curso'),
             Tab(text: 'Historial'),
@@ -80,7 +85,9 @@ class _OrdersScreenState extends State<OrdersScreen>
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : TabBarView(
               controller: _tabController,
               children: [
@@ -105,7 +112,11 @@ class _OrdersList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_rounded, size: 64, color: AppColors.slate400),
+            Icon(
+              Icons.receipt_long_rounded,
+              size: 64,
+              color: AppColors.slate400,
+            ),
             const SizedBox(height: 16),
             Text(
               'No hay pedidos',
@@ -233,7 +244,11 @@ class _OrderCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(_statusIcon(status), size: 16, color: _statusColor(status)),
+                  Icon(
+                    _statusIcon(status),
+                    size: 16,
+                    color: _statusColor(status),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     _statusLabel(status),
@@ -325,7 +340,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   int _statusStep(String status) {
     if (status.contains('delivered')) return 3;
     if (status.contains('on_the_way') || status.contains('picked_up')) return 2;
-    if (status.contains('preparing') || status.contains('accepted') || status.contains('ready')) return 1;
+    if (status.contains('preparing') ||
+        status.contains('accepted') ||
+        status.contains('ready'))
+      return 1;
     return 0;
   }
 
@@ -334,7 +352,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Detalle')),
-        body: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
     }
     if (_order == null) {
@@ -434,7 +454,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             // --- ETA Section ---
             if (eta != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Center(
                   child: Column(
                     children: [
@@ -486,7 +509,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   _TimelineStep(
                     icon: Icons.delivery_dining_rounded,
                     label: 'En camino',
-                    subtitle: currentStep >= 2 ? 'Tu pedido está en ruta' : 'Pendiente',
+                    subtitle: currentStep >= 2
+                        ? 'Tu pedido está en ruta'
+                        : 'Pendiente',
                     isCompleted: currentStep >= 2,
                     isActive: currentStep == 2,
                     showLine: true,
@@ -536,7 +561,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       child: const CircleAvatar(
                         radius: 26,
                         backgroundColor: Color(0xFFCBD5E1),
-                        child: Icon(Icons.person, color: Colors.white, size: 28),
+                        child: Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -566,7 +595,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF1F5F9),
                                   borderRadius: BorderRadius.circular(4),
@@ -606,7 +638,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.call, color: AppColors.primary, size: 20),
+                        icon: const Icon(
+                          Icons.call,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
                         padding: EdgeInsets.zero,
                         onPressed: () {},
                       ),
@@ -620,7 +656,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.chat, color: Colors.white, size: 20),
+                        icon: const Icon(
+                          Icons.chat,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         padding: EdgeInsets.zero,
                         onPressed: () {},
                       ),
@@ -666,12 +706,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           const SizedBox(height: 2),
                           Text(
                             o['store_name'] as String? ?? '',
-                            style: TextStyle(color: AppColors.slate500, fontSize: 12),
+                            style: TextStyle(
+                              color: AppColors.slate500,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -679,7 +725,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.help_outline, color: AppColors.primary, size: 14),
+                            Icon(
+                              Icons.help_outline,
+                              color: AppColors.primary,
+                              size: 14,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Ayuda',
@@ -695,25 +745,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  ...items.map<Widget>((i) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '${i['qty']}x ${i['name']}',
-                              style: TextStyle(color: AppColors.slate500, fontSize: 14),
+                  ...items.map<Widget>(
+                    (i) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${i['qty']}x ${i['name']}',
+                            style: TextStyle(
+                              color: AppColors.slate500,
+                              fontSize: 14,
                             ),
-                            Text(
-                              'S/ ${(i['line_total'] as num).toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.slate700,
-                              ),
+                          ),
+                          Text(
+                            'S/ ${(i['line_total'] as num).toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.slate700,
                             ),
-                          ],
-                        ),
-                      )),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Container(
@@ -792,7 +847,9 @@ class _TimelineStep extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: isCompleted
-                    ? (isActive ? AppColors.primary.withOpacity(0.2) : AppColors.primary)
+                    ? (isActive
+                          ? AppColors.primary.withOpacity(0.2)
+                          : AppColors.primary)
                     : const Color(0xFFF1F5F9),
                 shape: BoxShape.circle,
               ),
@@ -808,7 +865,9 @@ class _TimelineStep extends StatelessWidget {
               Container(
                 width: 2,
                 height: 40,
-                color: lineCompleted ? AppColors.primary : const Color(0xFFE2E8F0),
+                color: lineCompleted
+                    ? AppColors.primary
+                    : const Color(0xFFE2E8F0),
               ),
           ],
         ),
@@ -832,10 +891,7 @@ class _TimelineStep extends StatelessWidget {
                   if (subtitle.isNotEmpty)
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.slate500,
-                      ),
+                      style: TextStyle(fontSize: 14, color: AppColors.slate500),
                     ),
                 ],
               ),

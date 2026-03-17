@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../providers/cart_provider.dart';
 import '../services/store_service.dart';
+import '../widgets/product_detail_sheet.dart';
 
 class StoreCatalogScreen extends StatefulWidget {
   final String storeId;
@@ -37,8 +38,14 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
     setState(() => _loading = true);
     try {
       final items = await StoreService.getCatalogItems(widget.storeId, widget.branchId);
+      final enrichedItems = items.map((item) => {
+        ...item,
+        'store_id': widget.storeId,
+        'branch_id': widget.branchId,
+        'store_name': widget.storeName,
+      }).toList();
       setState(() {
-        _items = items;
+        _items = enrichedItems;
         _loading = false;
       });
     } catch (_) {
@@ -81,7 +88,7 @@ class _StoreCatalogScreenState extends State<StoreCatalogScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _addingIds[id!] = false);
+      if (mounted) setState(() => _addingIds[id] = false);
     }
   }
 
@@ -179,7 +186,7 @@ class _ProductCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: (isAdding || !canAdd) ? null : onAdd,
+          onTap: () => ProductDetailSheet.show(context, item),
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -193,11 +200,11 @@ class _ProductCard extends StatelessWidget {
                           width: 80,
                           height: 80,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
+                          placeholder: (_, _) => Container(
                             color: Colors.grey[200],
                             child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                           ),
-                          errorWidget: (_, __, ___) => Container(
+                          errorWidget: (_, _, _) => Container(
                             width: 80,
                             height: 80,
                             color: Colors.grey[200],
@@ -306,35 +313,38 @@ class _ProductCard extends StatelessWidget {
                                       ),
                                     ),
                                   )
-                                : Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: canAdd ? AppColors.primary : Colors.grey.shade300,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: canAdd
-                                          ? [
-                                              BoxShadow(
-                                                color: AppColors.primary.withOpacity(0.3),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ]
-                                          : null,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.add, color: canAdd ? Colors.white : Colors.grey.shade600, size: 20),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          canAdd ? 'Agregar' : 'No disponible',
-                                          style: TextStyle(
-                                            color: canAdd ? Colors.white : Colors.grey.shade600,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
+                                : GestureDetector(
+                                    onTap: canAdd ? onAdd : null,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: canAdd ? AppColors.primary : Colors.grey.shade300,
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: canAdd
+                                            ? [
+                                                BoxShadow(
+                                                  color: AppColors.primary.withOpacity(0.3),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.add, color: canAdd ? Colors.white : Colors.grey.shade600, size: 20),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            canAdd ? 'Agregar' : 'No disponible',
+                                            style: TextStyle(
+                                              color: canAdd ? Colors.white : Colors.grey.shade600,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                           ),

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import '../config/app_config.dart';
 import 'api_client.dart';
 
 class StoreService {
@@ -23,6 +22,18 @@ class StoreService {
       path += '?category=$category';
     }
     final res = await ApiClient.get(path);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final list = data is List ? data : (data['data'] as List? ?? []);
+      return List<Map<String, dynamic>>.from(list);
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getPopularProducts({
+    int limit = 20,
+  }) async {
+    final res = await ApiClient.get('/api/stores/popular-products?limit=$limit');
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final data = jsonDecode(res.body);
       final list = data is List ? data : (data['data'] as List? ?? []);
@@ -67,6 +78,16 @@ class StoreService {
     final res = await ApiClient.get(
       '/api/stores/catalog?store_id=$storeId&branch_id=$branchId',
     );
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body);
+      final list = data is List ? data : (data['data'] as List? ?? []);
+      return List<Map<String, dynamic>>.from(list);
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getStoreProductCategories(String storeId) async {
+    final res = await ApiClient.get('/api/stores/$storeId/product-categories');
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final data = jsonDecode(res.body);
       final list = data is List ? data : (data['data'] as List? ?? []);

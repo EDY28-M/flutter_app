@@ -4,14 +4,71 @@ import 'api_client.dart';
 class CartService {
   CartService._();
 
-  static Future<Map<String, dynamic>> getCart(String storeId, String branchId) async {
+  static dynamic _decodeBody(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic> _extractDataMap(String body) {
+    final decoded = _decodeBody(body);
+    if (decoded is! Map<String, dynamic>) {
+      return {};
+    }
+    final data = decoded['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return decoded;
+  }
+
+  static List<Map<String, dynamic>> _extractDataList(String body) {
+    final decoded = _decodeBody(body);
+    if (decoded is List) {
+      return List<Map<String, dynamic>>.from(decoded);
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return [];
+    }
+    final data = decoded['data'];
+    if (data is List) {
+      return List<Map<String, dynamic>>.from(data);
+    }
+    return [];
+  }
+
+  static String _extractErrorMessage(String body, String fallback) {
+    final decoded = _decodeBody(body);
+    if (decoded is! Map<String, dynamic>) {
+      return fallback;
+    }
+    final message = decoded['message'];
+    if (message is String && message.trim().isNotEmpty) {
+      return message;
+    }
+    return fallback;
+  }
+
+  static Map<String, dynamic> parseCartResponseBody(String body) {
+    return _extractDataMap(body);
+  }
+
+  static List<Map<String, dynamic>> parseCartsResponseBody(String body) {
+    return _extractDataList(body);
+  }
+
+  static Future<Map<String, dynamic>> getCart(
+    String storeId,
+    String branchId,
+  ) async {
     final res = await ApiClient.get(
       '/api/carts/current?store_id=$storeId&branch_id=$branchId',
       useAuth: true,
     );
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : (data['data'] ?? data) as Map<String, dynamic>;
+      return parseCartResponseBody(res.body);
     }
     return {'items': [], 'subtotal': 0.0, 'total': 0.0, 'store_name': null};
   }
@@ -19,9 +76,7 @@ class CartService {
   static Future<Map<String, dynamic>> getMyCarts() async {
     final res = await ApiClient.get('/api/carts', useAuth: true);
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      final list = data is List ? data : (data['data'] as List? ?? []);
-      return {'carts': List<Map<String, dynamic>>.from(list)};
+      return {'carts': parseCartsResponseBody(res.body)};
     }
     return {'carts': []};
   }
@@ -44,15 +99,23 @@ class CartService {
       if (variantId != null) 'variant_id': variantId,
       if (notes != null) 'notes': notes,
     };
-    final res = await ApiClient.post('/api/carts/items', body: body, useAuth: true);
+    final res = await ApiClient.post(
+      '/api/carts/items',
+      body: body,
+      useAuth: true,
+    );
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : (data['data'] ?? data) as Map<String, dynamic>;
+      return parseCartResponseBody(res.body);
     }
-    throw Exception('Error al agregar al carrito');
+    throw Exception(
+      _extractErrorMessage(res.body, 'Error al agregar al carrito'),
+    );
   }
 
-  static Future<Map<String, dynamic>> updateItemQty(String itemId, int qty) async {
+  static Future<Map<String, dynamic>> updateItemQty(
+    String itemId,
+    int qty,
+  ) async {
     return _patchCartItem(itemId, {'qty': qty});
   }
 
@@ -60,20 +123,29 @@ class CartService {
     String itemId,
     Map<String, dynamic> body,
   ) async {
-    final res = await ApiClient.patch('/api/carts/items/$itemId', body: body, useAuth: true);
+    final res = await ApiClient.patch(
+      '/api/carts/items/$itemId',
+      body: body,
+      useAuth: true,
+    );
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : (data['data'] ?? data) as Map<String, dynamic>;
+      return parseCartResponseBody(res.body);
     }
-    throw Exception('Error al actualizar');
+    throw Exception(
+      _extractErrorMessage(res.body, 'Error al actualizar carrito'),
+    );
   }
 
   static Future<Map<String, dynamic>> removeItem(String itemId) async {
-    final res = await ApiClient.delete('/api/carts/items/$itemId', useAuth: true);
+    final res = await ApiClient.delete(
+      '/api/carts/items/$itemId',
+      useAuth: true,
+    );
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : (data['data'] ?? data) as Map<String, dynamic>;
+      return parseCartResponseBody(res.body);
     }
-    throw Exception('Error al eliminar');
+    throw Exception(
+      _extractErrorMessage(res.body, 'Error al eliminar producto del carrito'),
+    );
   }
 }

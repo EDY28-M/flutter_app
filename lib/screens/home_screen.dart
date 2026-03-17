@@ -4,22 +4,126 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../providers/favorites_provider.dart';
 import '../services/store_service.dart';
-import 'store_catalog_screen.dart';
+import 'stores_list_screen.dart';
+import '../widgets/product_detail_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
+
+  // Dynamic Professional Theme mapping & Hash Fallback
+  static Map<String, dynamic> themeForCategory(String categoryName) {
+    if (categoryName.isEmpty) return _fallbackTheme('default');
+    final code = categoryName.trim().toLowerCase();
+
+    // 1. Expanded Premium Mappings with Rounded Icons
+    if (code.contains('farmacia') || code.contains('pharmacy') || code.contains('salud') || code.contains('medic') || code.contains('botica')) {
+      return {
+        'bg': Colors.blue.shade100.withOpacity(0.4),
+        'border': Colors.blue.shade200.withOpacity(0.5),
+        'iconColor': Colors.blue.shade600,
+        'icon': Icons.local_pharmacy_rounded,
+      };
+    } else if (code.contains('boutique') || code.contains('ropa') || code.contains('zapatos') || code.contains('moda') || code.contains('retail')) {
+      return {
+        'bg': Colors.purple.shade100.withOpacity(0.4),
+        'border': Colors.purple.shade200.withOpacity(0.5),
+        'iconColor': Colors.purple.shade600,
+        'icon': Icons.checkroom_rounded,
+      };
+    } else if (code.contains('tech') || code.contains('tecnolog') || code.contains('celular') || code.contains('comput')) {
+      return {
+        'bg': Colors.teal.shade100.withOpacity(0.4),
+        'border': Colors.teal.shade200.withOpacity(0.5),
+        'iconColor': Colors.teal.shade600,
+        'icon': Icons.devices_rounded,
+      };
+    } else if (code.contains('market') || code.contains('bodega') || code.contains('super') || code.contains('abarrote') || code.contains('mini') || code.contains('tienda') || code.contains('store')) {
+      return {
+        'bg': Colors.green.shade100.withOpacity(0.4),
+        'border': Colors.green.shade200.withOpacity(0.5),
+        'iconColor': Colors.green.shade600,
+        'icon': Icons.shopping_basket_rounded,
+      };
+    } else if (code.contains('mascota') || code.contains('pet') || code.contains('veterinaria') || code.contains('animal')) {
+      return {
+        'bg': Colors.brown.shade100.withOpacity(0.4),
+        'border': Colors.brown.shade200.withOpacity(0.5),
+        'iconColor': Colors.brown.shade600,
+        'icon': Icons.pets_rounded,
+      };
+    } else if (code.contains('licor') || code.contains('bebida') || code.contains('trago') || code.contains('cerveza')) {
+      return {
+        'bg': Colors.pink.shade100.withOpacity(0.4),
+        'border': Colors.pink.shade200.withOpacity(0.5),
+        'iconColor': Colors.pink.shade600,
+        'icon': Icons.liquor_rounded,
+      };
+    } else if (code.contains('restaurant') || code.contains('comida') || code.contains('burger') || code.contains('pollo') || code.contains('fast') || code.contains('cafe')) {
+      return {
+        'bg': Colors.orange.shade100.withOpacity(0.4),
+        'border': Colors.orange.shade200.withOpacity(0.5),
+        'iconColor': Colors.orange.shade800,
+        'icon': code.contains('pizza') ? Icons.local_pizza_rounded : Icons.restaurant_rounded,
+      };
+    }
+    
+    // 2. Hash-based dynamic generated beautiful fallbacks for unseen custom categories
+    return _fallbackTheme(code);
+  }
+
+  static Map<String, dynamic> _fallbackTheme(String hashSource) {
+    int hash = 0;
+    for (int i = 0; i < hashSource.length; i++) {
+      hash = hashSource.codeUnitAt(i) + ((hash << 5) - hash);
+    }
+    hash = hash.abs();
+
+    final palette = [
+      Colors.indigo, Colors.indigoAccent,
+      Colors.deepOrange, Colors.deepOrangeAccent,
+      Colors.cyan, Colors.cyanAccent,
+      Colors.pink, Colors.pinkAccent,
+      Colors.lightBlue, Colors.lightBlueAccent,
+      Colors.amber, Colors.amberAccent,
+    ];
+
+    final icons = [
+      Icons.storefront_rounded,
+      Icons.shopping_bag_rounded,
+      Icons.local_mall_rounded,
+      Icons.stars_rounded,
+      Icons.inventory_2_rounded,
+      Icons.category_rounded,
+      Icons.sell_rounded,
+      Icons.redeem_rounded,
+      Icons.dashboard_customize_rounded,
+    ];
+
+    final colorBase = palette[hash % palette.length];
+    final selectedIcon = icons[hash % icons.length];
+
+    // Some MaterialColor objects don't map directly back cleanly to shades, 
+    // but the palette mostly consists of primary swatches that work with opacity
+    final bgColor = (colorBase is MaterialColor) ? colorBase.shade100.withOpacity(0.4) : colorBase.withOpacity(0.15);
+    final borderColor = (colorBase is MaterialColor) ? colorBase.shade200.withOpacity(0.5) : colorBase.withOpacity(0.3);
+    final iconColor = (colorBase is MaterialColor) ? colorBase.shade600 : colorBase;
+
+    return {
+      'bg': bgColor,
+      'border': borderColor,
+      'iconColor': iconColor,
+      'icon': selectedIcon,
+    };
+  }
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _categories = [];
-  List<Map<String, dynamic>> _stores = [];
-  List<Map<String, dynamic>> _categoryProducts = [];
-  String? _selectedCategory;
+  List<Map<String, dynamic>> _popularProducts = [];
   bool _loading = true;
-  bool _loadingProducts = false;
 
   // ── Fallback data matching HTML exactly ──
   static const _fallbackCategories = [
@@ -27,31 +131,34 @@ class _HomeScreenState extends State<HomeScreen> {
     {'code': 'pharmacy', 'name': 'Farmacia'},
     {'code': 'boutique', 'name': 'Moda'},
     {'code': 'tech', 'name': 'Tech'},
-    {'code': 'market', 'name': 'Market'},
+    {'code': 'store', 'name': 'Tienda'},
   ];
 
-  static const _fallbackStores = [
+  static const _fallbackProducts = [
     {
       'id': 'demo1',
-      'branch_id': 'demo1b',
-      'name': 'The Burger Lab',
-      'image_url':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuCvFaiJZLhlmNTHj1X9SjAvpncboNT6k1r_VlluG1CF4vHJCH1NL6Ldp5397iWvRSmmFw5ARmbX4wPzXtWNmIJeFgeg7DHFBI-rNzj3rPqIKuoYMQMxXeAN1MwQU8NamdC70XVCYVoUbuF9BNY2svPfG3Fhdxi3l7zwdp30UWT6j8L3v4TxTaoUv3KJq2gh15iJERogk841Bjdys2991RqMoaIJ3HZA3V0wR0Unt_PMhmK7q2yxMAUphgnEaURhwM6EcnHJWmTB0A50',
-      'avg_rating': 4.8,
-      'prep_time_min': 15,
-      'category': {'name': 'Hamburguesas'},
-      'badge': 'free_delivery',
+      'branch_catalog_item_id': 'bci1',
+      'name': 'Hamburguesa Clásica',
+      'store_name': 'The Burger Lab',
+      'image_url': 'https://lh3.googleusercontent.com/aida-public/AB6AXuCvFaiJZLhlmNTHj1X9SjAvpncboNT6k1r_VlluG1CF4vHJCH1NL6Ldp5397iWvRSmmFw5ARmbX4wPzXtWNmIJeFgeg7DHFBI-rNzj3rPqIKuoYMQMxXeAN1MwQU8NamdC70XVCYVoUbuF9BNY2svPfG3Fhdxi3l7zwdp30UWT6j8L3v4TxTaoUv3KJq2gh15iJERogk841Bjdys2991RqMoaIJ3HZA3V0wR0Unt_PMhmK7q2yxMAUphgnEaURhwM6EcnHJWmTB0A50',
+      'base_price_amount': 25.00,
+      'is_on_offer': true,
+      'offer_price_amount': 19.90,
+      'store_id': 's1',
+      'branch_id': 'b1',
+      'description': 'Hamburguesa de res con queso, lechuga y tomate.',
     },
     {
       'id': 'demo2',
-      'branch_id': 'demo2b',
-      'name': 'Bella Pizza Artesanal',
-      'image_url':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAkY7PYpnSAcmhitcx-hBE4GeeElv6Pug2qAc9LTq4td2sOhXDe_5S7SwZkTz8H76EZ4aOt17brngh_TVZvlga0EH_EiLQ5hePJU3c0n--bTC0yLQufQIei0reftPM-MLHl6w3bfHQnE5nTMMvXX6boUV9U_nQtZCcq3mU5ePdk33AM0OZKENfuT10ah0KZQjVhd7YRgXY2ky_luzPgYJ6mJTHifkK4v-yG4ZqhOOcVhLxuDI1aNi5CIi_E6NQVWAvRJzEOGCrjRh8a',
-      'avg_rating': 4.5,
-      'prep_time_min': 30,
-      'category': {'name': 'Pizzas'},
-      'badge': 'popular',
+      'branch_catalog_item_id': 'bci2',
+      'name': 'Pizza Pepperoni',
+      'store_name': 'Bella Pizza',
+      'image_url': 'https://lh3.googleusercontent.com/aida-public/AB6AXuAkY7PYpnSAcmhitcx-hBE4GeeElv6Pug2qAc9LTq4td2sOhXDe_5S7SwZkTz8H76EZ4aOt17brngh_TVZvlga0EH_EiLQ5hePJU3c0n--bTC0yLQufQIei0reftPM-MLHl6w3bfHQnE5nTMMvXX6boUV9U_nQtZCcq3mU5ePdk33AM0OZKENfuT10ah0KZQjVhd7YRgXY2ky_luzPgYJ6mJTHifkK4v-yG4ZqhOOcVhLxuDI1aNi5CIi_E6NQVWAvRJzEOGCrjRh8a',
+      'base_price_amount': 45.00,
+      'is_on_offer': false,
+      'store_id': 's2',
+      'branch_id': 'b2',
+      'description': 'Pizza artesanal con pepperoni y queso mozzarella.',
     },
   ];
 
@@ -69,32 +176,15 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final results = await Future.wait([
         StoreService.getCategories(),
-        StoreService.getPopularStores(),
+        StoreService.getPopularProducts(),
       ]);
       setState(() {
         _categories = results[0];
-        _stores = results[1];
+        _popularProducts = results[1];
         _loading = false;
       });
     } catch (_) {
       setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadCategoryProducts() async {
-    if (_selectedCategory == null) return;
-    setState(() => _loadingProducts = true);
-    try {
-      final products = await StoreService.getProductsByCategory(_selectedCategory!);
-      setState(() {
-        _categoryProducts = products;
-        _loadingProducts = false;
-      });
-    } catch (_) {
-      setState(() {
-        _categoryProducts = [];
-        _loadingProducts = false;
-      });
     }
   }
 
@@ -106,9 +196,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final cats = _categories.isNotEmpty
         ? _categories
         : _fallbackCategories.map((e) => Map<String, dynamic>.from(e)).toList();
-    final stores = _stores.isNotEmpty
-        ? _stores
-        : _fallbackStores.map((e) => Map<String, dynamic>.from(e)).toList();
+    final products = _popularProducts.isNotEmpty
+        ? _popularProducts
+        : _fallbackProducts.map((e) => Map<String, dynamic>.from(e)).toList();
 
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
@@ -127,168 +217,243 @@ class _HomeScreenState extends State<HomeScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     itemCount: cats.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 16),
+                    separatorBuilder: (_, _) => const SizedBox(width: 16),
                     itemBuilder: (_, i) => _CategoryChip(
                       code: cats[i]['code'] as String? ?? '',
                       name: cats[i]['name'] as String? ?? '',
-                      selected: _selectedCategory == cats[i]['code'],
+                      selected: false,
                       onTap: () {
-                        setState(() {
-                          final c = cats[i]['code'] as String?;
-                          _selectedCategory = _selectedCategory == c ? null : c;
-                          if (_selectedCategory == null) {
-                            _categoryProducts = [];
-                          } else {
-                            _loadCategoryProducts();
-                          }
-                        });
+                        final categoryCode = cats[i]['code'] as String;
+                        final categoryName = cats[i]['name'] as String;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => StoresListScreen(
+                              categoryCode: categoryCode,
+                              categoryName: categoryName,
+                            ),
+                          ),
+                        );
                       },
-                      ),
                     ),
                   ),
+                ),
 
-                  // ── Promo Banner ──
-                  _PromoBanner(imageUrl: _promoImageUrl),
+                // ── Promo Banner ──
+                _PromoBanner(imageUrl: _promoImageUrl),
 
-                  // ── Section header ──
-                  if (_selectedCategory == null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Populares cerca de ti',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.slate700,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {},
-                            child: const Text(
-                              'Ver todos',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(20, 8, 20, 16),
-                      child: Text(
-                        'Productos de la categoría',
+                // ── Popular Products Header ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Productos populares',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: AppColors.slate700,
                         ),
                       ),
-                    ),
+                      GestureDetector(
+                        onTap: () {},
+                        child: const Text(
+                          'Ver todos',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-                  // ── Store or Product cards ──
-                  if (_loading || _loadingProducts)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 60),
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.primary),
-                      ),
-                    )
-                  else if (_selectedCategory != null)
-                    _categoryProducts.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 40, bottom: 80),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(Icons.search_off_rounded, size: 64, color: AppColors.slate300),
-                                  const SizedBox(height: 16),
-                                  const Text(
-                                    'No se encontraron resultados\nen esta categoría',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: AppColors.slate500,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _categoryProducts.length,
-                              itemBuilder: (context, index) {
-                                return _CategoryProductCard(
-                                  item: _categoryProducts[index],
-                                  onTap: () {
-                                    final p = _categoryProducts[index];
-                                    if (p['store_id'] != null && p['branch_id'] != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => StoreCatalogScreen(
-                                            storeId: p['store_id'] as String,
-                                            branchId: p['branch_id'] as String,
-                                            storeName: p['store_name'] as String? ?? 'Tienda',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                          )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                      child: Column(
-                        children: stores
-                            .map((s) => _StoreCard(
-                                  store: s,
-                                  onTap: () => _onStoreTap(s),
-                                ))
-                            .toList(),
-                      ),
+                // ── Popular Products Grid ──
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 60),
+                    child: Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
                     ),
-                ],
-              ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    child: Column(
+                      children: products
+                          .map((p) => _PopularProductCard(
+                                item: p,
+                                onTap: () {
+                                  ProductDetailSheet.show(context, p);
+                                },
+                              ))
+                          .toList(),
+                    ),
+                  ),
+              ],
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _onStoreTap(Map<String, dynamic> store) {
-    final storeId = store['id'] as String?;
-    final branchId = store['branch_id'] as String?;
-    final storeName = store['name'] as String? ?? 'Tienda';
-    if (storeId == null || branchId == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => StoreCatalogScreen(
-          storeId: storeId,
-          branchId: branchId,
-          storeName: storeName,
         ),
       ),
     );
   }
 }
 
+// ════════════════════════════════════════════════════
+//  POPULAR PRODUCT CARD (Large)
+// ════════════════════════════════════════════════════
+class _PopularProductCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final VoidCallback onTap;
+
+  const _PopularProductCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = item['name'] as String? ?? '';
+    final imageUrl = item['image_url'] as String?;
+    final price = (item['base_price_amount'] as num?)?.toDouble() ?? 0.0;
+    final isOnOffer = item['is_on_offer'] as bool? ?? false;
+    final offerPrice = (item['offer_price_amount'] as num?)?.toDouble();
+    final storeName = item['store_name'] as String? ?? 'Tienda';
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFF1F5F9)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.1),
+              blurRadius: 25,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image Section
+            SizedBox(
+              height: 192,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                   if (imageUrl != null && imageUrl.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, _) => Container(
+                        color: Colors.grey.shade200,
+                        child: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                      ),
+                      errorWidget: (_, _, _) => Container(
+                        color: Colors.grey.shade200, 
+                        child: const Icon(Icons.restaurant, size: 48, color: Colors.grey)
+                      ),
+                    )
+                  else
+                    Container(color: Colors.grey.shade200, child: const Icon(Icons.restaurant, size: 48, color: Colors.grey)),
+                  
+                  // Offer Badge
+                  if (isOnOffer)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentGreen,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
+                          ],
+                        ),
+                        child: const Text(
+                          'OFERTA',
+                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            // Content Section
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        storeName,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.slate700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'S/ ${(isOnOffer && offerPrice != null ? offerPrice : price).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.slate700,
+                        ),
+                      ),
+                      if (isOnOffer && offerPrice != null && offerPrice < price) ...[
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            'S/ ${price.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.slate400,
+                              decoration: TextDecoration.lineThrough,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 // ════════════════════════════════════════════════════
 //  HEADER — matches <header> in HTML exactly
 // ════════════════════════════════════════════════════
@@ -451,7 +616,7 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = _theme(name);
+    final theme = HomeScreen.themeForCategory(name);
     final bgColor = theme['bg'] as Color;
     final borderColor = theme['border'] as Color;
     final iconColor = theme['iconColor'] as Color;
@@ -505,111 +670,7 @@ class _CategoryChip extends StatelessWidget {
     );
   }
 
-  // Dynamic Professional Theme mapping & Hash Fallback
-  static Map<String, dynamic> _theme(String categoryName) {
-    if (categoryName.isEmpty) return _fallbackTheme('default');
-    final code = categoryName.trim().toLowerCase();
 
-    // 1. Expanded Premium Mappings with Rounded Icons
-    if (code.contains('farmacia') || code.contains('pharmacy') || code.contains('salud') || code.contains('medic') || code.contains('botica')) {
-      return {
-        'bg': Colors.blue.shade100.withOpacity(0.4),
-        'border': Colors.blue.shade200.withOpacity(0.5),
-        'iconColor': Colors.blue.shade600,
-        'icon': Icons.local_pharmacy_rounded,
-      };
-    } else if (code.contains('boutique') || code.contains('ropa') || code.contains('zapatos') || code.contains('moda') || code.contains('retail')) {
-      return {
-        'bg': Colors.purple.shade100.withOpacity(0.4),
-        'border': Colors.purple.shade200.withOpacity(0.5),
-        'iconColor': Colors.purple.shade600,
-        'icon': Icons.checkroom_rounded,
-      };
-    } else if (code.contains('tech') || code.contains('tecnolog') || code.contains('celular') || code.contains('comput')) {
-      return {
-        'bg': Colors.teal.shade100.withOpacity(0.4),
-        'border': Colors.teal.shade200.withOpacity(0.5),
-        'iconColor': Colors.teal.shade600,
-        'icon': Icons.devices_rounded,
-      };
-    } else if (code.contains('market') || code.contains('bodega') || code.contains('super') || code.contains('abarrote') || code.contains('mini')) {
-      return {
-        'bg': Colors.green.shade100.withOpacity(0.4),
-        'border': Colors.green.shade200.withOpacity(0.5),
-        'iconColor': Colors.green.shade600,
-        'icon': Icons.shopping_basket_rounded,
-      };
-    } else if (code.contains('mascota') || code.contains('pet') || code.contains('veterinaria') || code.contains('animal')) {
-      return {
-        'bg': Colors.brown.shade100.withOpacity(0.4),
-        'border': Colors.brown.shade200.withOpacity(0.5),
-        'iconColor': Colors.brown.shade600,
-        'icon': Icons.pets_rounded,
-      };
-    } else if (code.contains('licor') || code.contains('bebida') || code.contains('trago') || code.contains('cerveza')) {
-      return {
-        'bg': Colors.pink.shade100.withOpacity(0.4),
-        'border': Colors.pink.shade200.withOpacity(0.5),
-        'iconColor': Colors.pink.shade600,
-        'icon': Icons.liquor_rounded,
-      };
-    } else if (code.contains('restaurant') || code.contains('comida') || code.contains('burger') || code.contains('pollo') || code.contains('fast') || code.contains('cafe')) {
-      return {
-        'bg': Colors.orange.shade100.withOpacity(0.4),
-        'border': Colors.orange.shade200.withOpacity(0.5),
-        'iconColor': Colors.orange.shade800,
-        'icon': code.contains('pizza') ? Icons.local_pizza_rounded : Icons.restaurant_rounded,
-      };
-    }
-    
-    // 2. Hash-based dynamic generated beautiful fallbacks for unseen custom categories
-    return _fallbackTheme(code);
-  }
-
-  static Map<String, dynamic> _fallbackTheme(String hashSource) {
-    int hash = 0;
-    for (int i = 0; i < hashSource.length; i++) {
-      hash = hashSource.codeUnitAt(i) + ((hash << 5) - hash);
-    }
-    hash = hash.abs();
-
-    final palette = [
-      Colors.indigo, Colors.indigoAccent,
-      Colors.deepOrange, Colors.deepOrangeAccent,
-      Colors.cyan, Colors.cyanAccent,
-      Colors.pink, Colors.pinkAccent,
-      Colors.lightBlue, Colors.lightBlueAccent,
-      Colors.amber, Colors.amberAccent,
-    ];
-
-    final icons = [
-      Icons.storefront_rounded,
-      Icons.shopping_bag_rounded,
-      Icons.local_mall_rounded,
-      Icons.stars_rounded,
-      Icons.inventory_2_rounded,
-      Icons.category_rounded,
-      Icons.sell_rounded,
-      Icons.redeem_rounded,
-      Icons.dashboard_customize_rounded,
-    ];
-
-    final colorBase = palette[hash % palette.length];
-    final selectedIcon = icons[hash % icons.length];
-
-    // Some MaterialColor objects don't map directly back cleanly to shades, 
-    // but the palette mostly consists of primary swatches that work with opacity
-    final bgColor = (colorBase is MaterialColor) ? colorBase.shade100.withOpacity(0.4) : colorBase.withOpacity(0.15);
-    final borderColor = (colorBase is MaterialColor) ? colorBase.shade200.withOpacity(0.5) : colorBase.withOpacity(0.3);
-    final iconColor = (colorBase is MaterialColor) ? colorBase.shade600 : colorBase;
-
-    return {
-      'bg': bgColor,
-      'border': borderColor,
-      'iconColor': iconColor,
-      'icon': selectedIcon,
-    };
-  }
 }
 
 // ════════════════════════════════════════════════════
@@ -726,9 +787,9 @@ class _PromoBanner extends StatelessWidget {
                     CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
+                      placeholder: (_, _) => Container(
                           color: Colors.orange.withOpacity(0.4)),
-                      errorWidget: (_, __, ___) => Container(
+                      errorWidget: (_, _, _) => Container(
                           color: Colors.orange.withOpacity(0.4)),
                     ),
                     Positioned(
@@ -752,9 +813,10 @@ class _PromoBanner extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════
-//  STORE CARD — matches each card in HTML grid
-// ════════════════════════════════════════════════════
-class _StoreCard extends StatelessWidget {
+  //  STORE CARD — matches each card in HTML grid
+  // ════════════════════════════════════════════════════
+  // ignore: unused_element
+  class _StoreCard extends StatelessWidget {
   final Map<String, dynamic> store;
   final VoidCallback onTap;
 
@@ -813,9 +875,9 @@ class _StoreCard extends StatelessWidget {
                     CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      placeholder: (_, __) =>
+                      placeholder: (_, _) =>
                           Container(color: Colors.grey.shade200),
-                      errorWidget: (_, __, ___) => Container(
+                      errorWidget: (_, _, _) => Container(
                         color: Colors.grey.shade200,
                         child: const Icon(Icons.restaurant,
                             size: 48, color: Colors.grey),
@@ -1011,162 +1073,4 @@ class _DotPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// ════════════════════════════════════════════════════
-//  CATEGORY PRODUCT CARD
-// ════════════════════════════════════════════════════
-class _CategoryProductCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final VoidCallback? onTap;
 
-  const _CategoryProductCard({required this.item, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = item['name'] as String? ?? '';
-    final imageUrl = item['image_url'] as String?;
-    final price = (item['base_price_amount'] as num?)?.toDouble() ?? 0.0;
-    final description = item['description'] as String?;
-    final isOnOffer = item['is_on_offer'] as bool? ?? false;
-    final offerPrice = (item['offer_price_amount'] as num?)?.toDouble();
-    final storeName = item['store_name'] as String? ?? 'Tienda';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: imageUrl != null && imageUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
-                            color: Colors.grey[200],
-                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-                          ),
-                          errorWidget: (_, __, ___) => Container(
-                            width: 80,
-                            height: 80,
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.restaurant, size: 32),
-                          ),
-                        )
-                      : Container(
-                          width: 80,
-                          height: 80,
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.restaurant, size: 32),
-                        ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        storeName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppColors.slate700,
-                        ),
-                      ),
-                      if (description != null && description.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            description,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.slate500,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      if (isOnOffer) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'OFERTA',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                      ],
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (isOnOffer && offerPrice != null && offerPrice < price)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6, bottom: 2),
-                              child: Text(
-                                'S/ ${price.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.slate400,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                            ),
-                          Text(
-                            'S/ ${(isOnOffer && offerPrice != null ? offerPrice : price).toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.slate400),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
