@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../providers/cart_provider.dart';
+import '../services/address_service.dart';
+import 'address_form_screen.dart';
 import 'checkout_screen.dart';
 
 class CartScreen extends StatefulWidget {
@@ -268,11 +270,52 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  void _checkout(
+  Future<void> _checkout(
     BuildContext context,
     CartProvider cart,
     Map<String, dynamic> currentCart,
-  ) {
+  ) async {
+    final defaultAddress = await AddressService.getDefaultAddress();
+    if (!context.mounted) return;
+
+    if (defaultAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debes agregar una direccion antes de ir a pagar.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final goToAddress = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Direccion requerida'),
+          content: const Text(
+            'Para continuar con tu pedido, primero agrega una direccion de entrega.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Ahora no'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Agregar direccion'),
+            ),
+          ],
+        ),
+      );
+
+      if (goToAddress == true && context.mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddressFormScreen()),
+        );
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(

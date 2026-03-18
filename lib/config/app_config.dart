@@ -22,4 +22,14 @@ class AppConfig {
   /// Prioridad: ngrok > emulador/dispositivo
   static String get apiBaseUrl =>
       useNgrok ? apiBaseUrlNgrok : (kDebugMode ? apiBaseUrlEmulator : apiBaseUrlDevice);
+
+    /// Base URL del backend admin (donde vive /uploads de categorías).
+    /// En local suele ser el mismo host del API principal, cambiando 3000 -> 3001.
+    static String get adminBaseUrl {
+        final base = apiBaseUrl;
+        if (base.contains(':3000')) {
+            return base.replaceFirst(':3000', ':3001');
+        }
+        return base;
+    }
 }

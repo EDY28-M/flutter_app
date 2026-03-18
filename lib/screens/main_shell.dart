@@ -4,6 +4,7 @@ import '../core/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/favorites_provider.dart';
+import '../services/auth_service.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'home_screen.dart';
 import 'orders_screen.dart';
@@ -28,7 +29,45 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CartProvider>().loadMyCarts();
       context.read<FavoritesProvider>().load();
+      _showNewUserWelcomePopupIfNeeded();
     });
+  }
+
+  Future<void> _showNewUserWelcomePopupIfNeeded() async {
+    final loyalty = context.read<AuthProvider>().user?['loyalty'];
+    if (loyalty is! Map<String, dynamic>) return;
+
+    final popup = loyalty['welcome_popup'];
+    if (popup is! Map<String, dynamic>) return;
+    final shouldShow = popup['show'] as bool? ?? false;
+    if (!shouldShow || !mounted) return;
+
+    final message = popup['message'] as String? ??
+        'Por ser usuario nuevo tienes envios gratis por 5 dias en toda la tienda FastGo.';
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Bienvenido a FastGo',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              if (Navigator.of(dialogContext).canPop()) {
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+
+    await AuthService.markWelcomePopupSeen();
   }
 
   @override
@@ -42,12 +81,15 @@ class _MainShellState extends State<MainShell> {
           resizeToAvoidBottomInset: false,
           body: IndexedStack(
             index: _current.index,
-            children: const [
-              HomeScreen(),
-              OrdersScreen(),
-              OffersScreen(),
-              CartScreen(),
-              ProfileScreen(),
+            children: [
+              HomeScreen(
+                isActive: _current == NavItem.home,
+                onOpenOffers: () => setState(() => _current = NavItem.offers),
+              ),
+              OrdersScreen(isActive: _current == NavItem.orders),
+              OffersScreen(isActive: _current == NavItem.offers),
+              const CartScreen(),
+              const ProfileScreen(),
             ],
           ),
           bottomNavigationBar: Consumer<CartProvider>(

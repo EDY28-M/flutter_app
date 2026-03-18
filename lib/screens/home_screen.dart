@@ -5,10 +5,15 @@ import '../core/app_colors.dart';
 import '../providers/favorites_provider.dart';
 import '../services/store_service.dart';
 import 'stores_list_screen.dart';
+import 'offers_screen.dart';
+import 'product_search_screen.dart';
 import '../widgets/product_detail_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onOpenOffers;
+  final bool isActive;
+
+  const HomeScreen({super.key, this.onOpenOffers, this.isActive = true});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -120,10 +125,51 @@ class HomeScreen extends StatefulWidget {
   }
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _categories = [];
   List<Map<String, dynamic>> _popularProducts = [];
   bool _loading = true;
+  int _logoRefreshToken = DateTime.now().millisecondsSinceEpoch;
+
+  String _logoSignature(List<Map<String, dynamic>> categories) {
+    final entries = categories
+        .map((c) => '${c['id'] ?? ''}|${c['logo_url'] ?? ''}')
+        .toList()
+      ..sort();
+    return entries.join(';');
+  }
+
+  List<MapEntry<String, List<Map<String, dynamic>>>>
+      _groupProductsByBusinessCategory(List<Map<String, dynamic>> products) {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+
+    for (final product in products) {
+      final rawCategory =
+          (product['business_category_name'] ?? product['category_name'] ??
+                  'General')
+              .toString()
+              .trim();
+      final key = rawCategory.isEmpty ? 'General' : rawCategory;
+      grouped.putIfAbsent(key, () => []).add(product);
+    }
+
+    final sections = grouped.entries.toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+
+    for (final section in sections) {
+      section.value.sort((a, b) {
+        final offerA = (a['is_on_offer'] as bool? ?? false) ? 1 : 0;
+        final offerB = (b['is_on_offer'] as bool? ?? false) ? 1 : 0;
+        if (offerA != offerB) return offerB.compareTo(offerA);
+
+        final nameA = (a['name'] as String? ?? '').toLowerCase();
+        final nameB = (b['name'] as String? ?? '').toLowerCase();
+        return nameA.compareTo(nameB);
+      });
+    }
+
+    return sections;
+  }
 
   // ── Fallback data matching HTML exactly ──
   static const _fallbackCategories = [
@@ -147,6 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'store_id': 's1',
       'branch_id': 'b1',
       'description': 'Hamburguesa de res con queso, lechuga y tomate.',
+      'business_category_name': 'Comida',
     },
     {
       'id': 'demo2',
@@ -159,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'store_id': 's2',
       'branch_id': 'b2',
       'description': 'Pizza artesanal con pepperoni y queso mozzarella.',
+      'business_category_name': 'Comida',
     },
   ];
 
@@ -168,23 +216,59 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _load(showLoader: false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _load(showLoader: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() => _loading = true);
+    }
+
     try {
       final results = await Future.wait([
         StoreService.getCategories(),
         StoreService.getPopularProducts(),
       ]);
+
+      final nextCategories = results[0];
+      final logoChanged = _logoSignature(_categories) != _logoSignature(nextCategories);
+
+      if (!mounted) return;
       setState(() {
-        _categories = results[0];
+        _categories = nextCategories;
         _popularProducts = results[1];
         _loading = false;
+        if (logoChanged) {
+          _logoRefreshToken = DateTime.now().millisecondsSinceEpoch;
+        }
       });
     } catch (_) {
-      setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -199,79 +283,101 @@ class _HomeScreenState extends State<HomeScreen> {
     final products = _popularProducts.isNotEmpty
         ? _popularProducts
         : _fallbackProducts.map((e) => Map<String, dynamic>.from(e)).toList();
+    final productSections = _groupProductsByBusinessCategory(products);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _Header(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16), // Spacing below the orange header
-                // ── Categories ──
-                SizedBox(
-                  height: 140,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    itemCount: cats.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 16),
-                    itemBuilder: (_, i) => _CategoryChip(
-                      code: cats[i]['code'] as String? ?? '',
-                      name: cats[i]['name'] as String? ?? '',
-                      selected: false,
-                      onTap: () {
-                        final categoryCode = cats[i]['code'] as String;
-                        final categoryName = cats[i]['name'] as String;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => StoresListScreen(
-                              categoryCode: categoryCode,
-                              categoryName: categoryName,
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          child: Column(
+            children: [
+              _Header(
+                onSearchTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProductSearchScreen()),
+                  );
+                },
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16), // Spacing below the orange header
+                  // ── Categories ──
+                  SizedBox(
+                    height: 140,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      itemCount: cats.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 16),
+                      itemBuilder: (_, i) => _CategoryChip(
+                        code: cats[i]['code'] as String? ?? '',
+                        name: cats[i]['name'] as String? ?? '',
+                        logoUrl: cats[i]['logo_url'] as String?,
+                        logoVersion: _logoRefreshToken,
+                        backgroundColorHex: cats[i]['bg_color'] as String?,
+                        selected: false,
+                        onTap: () {
+                          final categoryCode = cats[i]['code'] as String;
+                          final categoryName = cats[i]['name'] as String;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => StoresListScreen(
+                                categoryCode: categoryCode,
+                                categoryName: categoryName,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
 
-                // ── Promo Banner ──
-                _PromoBanner(imageUrl: _promoImageUrl),
+                  // ── Promo Banner ──
+                  _PromoBanner(
+                    imageUrl: _promoImageUrl,
+                    onTap: widget.onOpenOffers ??
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const OffersScreen()),
+                          );
+                        },
+                  ),
 
-                // ── Popular Products Header ──
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  // ── Popular Products Header ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Productos populares',
+                        'Productos por categoria',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: AppColors.slate700,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () {},
-                        child: const Text(
-                          'Ver todos',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
+                      Text(
+                        '${products.length} productos',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.slate500,
                         ),
-                      ),
+                      )
                     ],
                   ),
                 ),
 
-                // ── Popular Products Grid ──
+                // ── Horizontal product rails grouped by business category ──
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.only(top: 60),
@@ -283,19 +389,69 @@ class _HomeScreenState extends State<HomeScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                     child: Column(
-                      children: products
-                          .map((p) => _PopularProductCard(
-                                item: p,
-                                onTap: () {
-                                  ProductDetailSheet.show(context, p);
-                                },
+                      children: productSections
+                          .map((section) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            section.key,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.slate700,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${section.value.length} items',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.slate500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    height: 320,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      physics: const BouncingScrollPhysics(),
+                                      itemCount: section.value.length,
+                                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                      itemBuilder: (_, index) {
+                                        final p = section.value[index];
+                                        return Align(
+                                          alignment: Alignment.topLeft,
+                                          child: SizedBox(
+                                            width: 258,
+                                            child: _PopularProductCard(
+                                              item: p,
+                                              onTap: () {
+                                                ProductDetailSheet.show(context, p);
+                                              },
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                ],
                               ))
                           .toList(),
                     ),
-                  ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          ],
         ),
       ),
     );
@@ -319,11 +475,15 @@ class _PopularProductCard extends StatelessWidget {
     final isOnOffer = item['is_on_offer'] as bool? ?? false;
     final offerPrice = (item['offer_price_amount'] as num?)?.toDouble();
     final storeName = item['store_name'] as String? ?? 'Tienda';
+    final hasDiscount = isOnOffer && offerPrice != null && offerPrice < price;
+    final discountPercent = hasDiscount
+        ? (((price - offerPrice) / price) * 100).round()
+        : 0;
+    final savingsAmount = hasDiscount ? (price - offerPrice) : 0.0;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 24),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -338,11 +498,12 @@ class _PopularProductCard extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image Section
             SizedBox(
-              height: 192,
+              height: 176,
               width: double.infinity,
               child: Stack(
                 fit: StackFit.expand,
@@ -363,23 +524,47 @@ class _PopularProductCard extends StatelessWidget {
                   else
                     Container(color: Colors.grey.shade200, child: const Icon(Icons.restaurant, size: 48, color: Colors.grey)),
                   
-                  // Offer Badge
-                  if (isOnOffer)
+                  // Offer Badge (redesigned)
+                  if (hasDiscount)
                     Positioned(
-                      top: 16,
-                      left: 16,
+                      top: 12,
+                      left: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppColors.accentGreen,
-                          borderRadius: BorderRadius.circular(20),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFFE11D48), Color(0xFFF97316)],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
+                            BoxShadow(
+                              color: const Color(0xFF9F1239).withOpacity(0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
                           ],
                         ),
-                        child: const Text(
-                          'OFERTA',
-                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.local_fire_department_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$discountPercent% OFF',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -389,53 +574,58 @@ class _PopularProductCard extends StatelessWidget {
             
             // Content Section
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primary),
+                      const Icon(Icons.storefront_rounded, size: 14, color: AppColors.primary),
                       const SizedBox(width: 4),
                       Text(
                         storeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
                     name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 14,
+                      height: 1.25,
                       fontWeight: FontWeight.bold,
                       color: AppColors.slate700,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'S/ ${(isOnOffer && offerPrice != null ? offerPrice : price).toStringAsFixed(2)}',
+                        'S/ ${(hasDiscount ? offerPrice : price).toStringAsFixed(2)}',
                         style: const TextStyle(
-                          fontSize: 20,
+                          fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: AppColors.slate700,
                         ),
                       ),
-                      if (isOnOffer && offerPrice != null && offerPrice < price) ...[
-                        const SizedBox(width: 8),
+                      if (hasDiscount) ...[
+                        const SizedBox(width: 6),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 2),
                           child: Text(
                             'S/ ${price.toStringAsFixed(2)}',
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 12,
                               color: AppColors.slate400,
                               decoration: TextDecoration.lineThrough,
                               fontWeight: FontWeight.w600,
@@ -445,6 +635,25 @@ class _PopularProductCard extends StatelessWidget {
                       ],
                     ],
                   ),
+                  if (hasDiscount) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(0xFFFFD5DD)),
+                      ),
+                      child: Text(
+                        'Ahorra S/ ${savingsAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Color(0xFFBE123C),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -458,6 +667,10 @@ class _PopularProductCard extends StatelessWidget {
 //  HEADER — matches <header> in HTML exactly
 // ════════════════════════════════════════════════════
 class _Header extends StatelessWidget {
+  final VoidCallback? onSearchTap;
+
+  const _Header({this.onSearchTap});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -561,33 +774,36 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               // ── Search bar ──
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.search, color: AppColors.slate400, size: 24),
-                    const SizedBox(width: 12),
-                    Text(
-                      '¿Qué se te antoja hoy?',
-                      style: TextStyle(
-                        color: AppColors.slate400,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+              GestureDetector(
+                onTap: onSearchTap,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search, color: AppColors.slate400, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        '¿Qué se te antoja hoy?',
+                        style: TextStyle(
+                          color: AppColors.slate400,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -604,23 +820,57 @@ class _Header extends StatelessWidget {
 class _CategoryChip extends StatelessWidget {
   final String code;
   final String name;
+  final String? logoUrl;
+  final int? logoVersion;
+  final String? backgroundColorHex;
   final bool selected;
   final VoidCallback onTap;
 
   const _CategoryChip({
     required this.code,
     required this.name,
+    this.logoUrl,
+    this.logoVersion,
+    this.backgroundColorHex,
     required this.selected,
     required this.onTap,
   });
 
+  String _cacheBustedLogoUrl(String url) {
+    if (logoVersion == null) return url;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasAuthority) return url;
+
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['_v'] = logoVersion.toString();
+    return uri.replace(queryParameters: params).toString();
+  }
+
+  Color _parseHexColor(String? input, Color fallback) {
+    final raw = (input ?? '').trim();
+    if (!RegExp(r'^#([A-Fa-f0-9]{6})$').hasMatch(raw)) return fallback;
+    final hex = raw.substring(1);
+    final value = int.tryParse(hex, radix: 16);
+    if (value == null) return fallback;
+    return Color(0xFF000000 | value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = HomeScreen.themeForCategory(name);
-    final bgColor = theme['bg'] as Color;
-    final borderColor = theme['border'] as Color;
-    final iconColor = theme['iconColor'] as Color;
+    final fallbackBg = theme['bg'] as Color;
+    final fallbackBorder = theme['border'] as Color;
+    final fallbackIcon = theme['iconColor'] as Color;
     final icon = theme['icon'] as IconData;
+
+    final hasCustomColor = RegExp(r'^#([A-Fa-f0-9]{6})$').hasMatch((backgroundColorHex ?? '').trim());
+    final customColor = _parseHexColor(backgroundColorHex, fallbackBg);
+    final bgColor = hasCustomColor ? customColor.withValues(alpha: 0.20) : fallbackBg;
+    final borderColor = hasCustomColor ? customColor.withValues(alpha: 0.55) : fallbackBorder;
+    final iconColor = hasCustomColor
+        ? HSLColor.fromColor(customColor).withLightness(0.45).toColor()
+        : fallbackIcon;
 
     return GestureDetector(
       onTap: onTap,
@@ -649,8 +899,22 @@ class _CategoryChip extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Center(
-                  child: Icon(icon, color: iconColor, size: 36)),
+              clipBehavior: Clip.antiAlias,
+              child: (logoUrl != null && logoUrl!.isNotEmpty)
+                  ? Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: CachedNetworkImage(
+                        imageUrl: _cacheBustedLogoUrl(logoUrl!),
+                        fit: BoxFit.contain,
+                        placeholder: (_, __) => Center(
+                          child: Icon(icon, color: iconColor, size: 28),
+                        ),
+                        errorWidget: (_, __, ___) => Center(
+                          child: Icon(icon, color: iconColor, size: 36),
+                        ),
+                      ),
+                    )
+                  : Center(child: Icon(icon, color: iconColor, size: 36)),
             ),
             const SizedBox(height: 8),
             Text(
@@ -678,106 +942,105 @@ class _CategoryChip extends StatelessWidget {
 // ════════════════════════════════════════════════════
 class _PromoBanner extends StatelessWidget {
   final String imageUrl;
-  const _PromoBanner({required this.imageUrl});
+  final VoidCallback onTap;
+
+  const _PromoBanner({required this.imageUrl, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.1),
-            blurRadius: 25,
-            offset: const Offset(0, 10),
+    final imageWidth = MediaQuery.of(context).size.width * 0.46;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+        height: 208,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(30),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFDC2626), Color(0xFFF97316), Color(0xFFFACC15)],
+            stops: [0.0, 0.62, 1.0],
           ),
-        ],
-      ),
-      child: AspectRatio(
-        aspectRatio: 21 / 9, // aspect-[21/9] from HTML
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFD9480F).withOpacity(0.34),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // gradient bg
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, Color(0xFFFB923C)], // to-orange-400
-                ),
-              ),
-            ),
-            // dot pattern
             Positioned.fill(
               child: Opacity(
-                opacity: 0.3,
+                opacity: 0.24,
                 child: CustomPaint(painter: _DotPainter(1)),
               ),
             ),
-            // text side
             Positioned(
-              left: 24,
-              top: 0,
-              bottom: 0,
-              right: MediaQuery.of(context).size.width * 0.5 - 16,
+              left: 20,
+              top: 20,
+              right: imageWidth + 14,
+              bottom: 20,
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // "Limitado" pill
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: Colors.white.withOpacity(0.3)),
+                      border: Border.all(color: Colors.white.withOpacity(0.35)),
                     ),
                     child: const Text(
-                      'LIMITADO',
+                      'FLASH SALE',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.3,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   const Text(
-                    'Ofertas del día',
+                    'OFERTAS\nDEL DIA',
+                    maxLines: 2,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      height: 1.1,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      height: 0.98,
+                      letterSpacing: 0.4,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Text(
-                    'Hasta 50% de descuento',
+                    'Hasta 50% OFF hoy',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withOpacity(0.95),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
               ),
             ),
-            // image side (right half) — rounded-l-[4rem] border-l-4 border-white/20
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
-              width: MediaQuery.of(context).size.width * 0.5 - 16,
+              width: imageWidth,
               child: Container(
                 decoration: const BoxDecoration(
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(64),
-                    bottomLeft: Radius.circular(64),
+                    topLeft: Radius.circular(74),
+                    bottomLeft: Radius.circular(74),
                   ),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -787,18 +1050,68 @@ class _PromoBanner extends StatelessWidget {
                     CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      placeholder: (_, _) => Container(
-                          color: Colors.orange.withOpacity(0.4)),
-                      errorWidget: (_, _, _) => Container(
-                          color: Colors.orange.withOpacity(0.4)),
+                      placeholder: (_, _) => Container(color: Colors.orange.withOpacity(0.42)),
+                      errorWidget: (_, _, _) => Container(color: Colors.orange.withOpacity(0.42)),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.black.withOpacity(0.15),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                     Positioned(
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      child: Container(
-                        width: 4,
-                        color: Colors.white.withOpacity(0.2),
+                      child: Container(width: 4, color: Colors.white.withOpacity(0.26)),
+                    ),
+                    Positioned(
+                      right: 14,
+                      bottom: 14,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onTap,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.18),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'IR',
+                                  style: TextStyle(
+                                    color: AppColors.primaryDark,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(Icons.arrow_forward_rounded, color: AppColors.primaryDark, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -862,6 +1175,7 @@ class _PromoBanner extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Image section (h-48 = 192px) ──

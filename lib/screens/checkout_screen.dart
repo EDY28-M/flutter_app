@@ -276,7 +276,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: (_placing || _addresses.isEmpty) ? null : _placeOrder,
+                      onPressed: (_placing || _addresses.isEmpty || _selectedAddress == null)
+                          ? null
+                          : _placeOrder,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,

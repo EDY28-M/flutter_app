@@ -89,9 +89,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     
     final isOnOffer = widget.product['is_on_offer'] as bool? ?? false;
     final offerPrice = (widget.product['offer_price_amount'] as num?)?.toDouble();
+    final hasDiscount = isOnOffer && offerPrice != null && offerPrice < price;
+    final discountPercent = hasDiscount
+      ? (((price - offerPrice) / price) * 100).round()
+      : 0;
+    final savingsAmount = hasDiscount ? (price - offerPrice) : 0.0;
 
     final canAdd = widget.product['branch_catalog_item_id'] != null;
-    final currentPrice = (isOnOffer && offerPrice != null) ? offerPrice : price;
+    final currentPrice = hasDiscount ? offerPrice : price;
 
     return Container(
       constraints: BoxConstraints(
@@ -127,21 +132,69 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   if (imageUrl != null && imageUrl.isNotEmpty)
                     AspectRatio(
                       aspectRatio: 4 / 3,
-                      child: CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: Colors.grey[200],
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primary,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey[200],
+                              child: const Icon(Icons.image_not_supported, size: 48, color: Colors.grey),
                             ),
                           ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.image_not_supported, size: 48, color: Colors.grey),
-                        ),
+                          if (hasDiscount)
+                            Positioned(
+                              top: 14,
+                              left: 14,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFFE11D48), Color(0xFFF97316)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF9F1239).withOpacity(0.35),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.local_fire_department_rounded,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '$discountPercent% OFF',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   
@@ -190,7 +243,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                                 color: AppColors.slate700,
                               ),
                             ),
-                            if (isOnOffer && offerPrice != null && offerPrice < price) ...[
+                            if (hasDiscount) ...[
                               const SizedBox(width: 12),
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
@@ -207,23 +260,43 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                               const SizedBox(width: 12),
                               Container(
                                 margin: const EdgeInsets.only(bottom: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: AppColors.accentGreen.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(8),
+                                  color: const Color(0xFFFFF1F2),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFFFD5DD)),
                                 ),
                                 child: Text(
-                                  '-${(((price - offerPrice) / price) * 100).round()}%',
+                                  '-$discountPercent%',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.accentGreen,
+                                    color: Color(0xFFBE123C),
                                   ),
                                 ),
                               ),
                             ],
                           ],
                         ),
+                        if (hasDiscount) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: const Color(0xFFFFD5DD)),
+                            ),
+                            child: Text(
+                              'Ahorra S/ ${savingsAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFBE123C),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         
                         // Description

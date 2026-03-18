@@ -7,13 +7,16 @@ import '../services/store_service.dart';
 import '../widgets/product_detail_sheet.dart';
 
 class OffersScreen extends StatefulWidget {
-  const OffersScreen({super.key});
+  final bool isActive;
+
+  const OffersScreen({super.key, this.isActive = true});
 
   @override
   State<OffersScreen> createState() => _OffersScreenState();
 }
 
-class _OffersScreenState extends State<OffersScreen> {
+class _OffersScreenState extends State<OffersScreen>
+    with WidgetsBindingObserver {
   List<Map<String, dynamic>> _offers = [];
   bool _loading = true;
   String _selectedFilter = 'Todo';
@@ -22,11 +25,36 @@ class _OffersScreenState extends State<OffersScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void didUpdateWidget(covariant OffersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _load(showLoader: false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _load(showLoader: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() => _loading = true);
+    }
+
     try {
       final offers = await StoreService.getOffers();
 
@@ -37,12 +65,17 @@ class _OffersScreenState extends State<OffersScreen> {
           .toList();
       categories.sort();
 
+      if (!mounted) return;
       setState(() {
         _offers = offers;
         _filters = ['Todo', ...categories];
+        if (!_filters.contains(_selectedFilter)) {
+          _selectedFilter = 'Todo';
+        }
         _loading = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
@@ -72,6 +105,11 @@ class _OffersScreenState extends State<OffersScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Actualizar ofertas',
+            onPressed: () => _load(showLoader: false),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.slate700),
+          ),
           Container(
             margin: const EdgeInsets.only(right: 16),
             decoration: BoxDecoration(
@@ -147,32 +185,48 @@ class _OffersScreenState extends State<OffersScreen> {
                     child: CircularProgressIndicator(color: AppColors.primary),
                   )
                 : filteredOffers.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.local_offer_outlined,
-                          size: 64,
-                          color: AppColors.slate300,
+                ? RefreshIndicator(
+                    onRefresh: () => _load(showLoader: false),
+                    color: AppColors.primary,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      children: const [
+                        SizedBox(height: 140),
+                        Center(
+                          child: Icon(
+                            Icons.local_offer_outlined,
+                            size: 64,
+                            color: AppColors.slate300,
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No hay ofertas disponibles',
-                          style: TextStyle(
-                            color: AppColors.slate500,
-                            fontSize: 16,
+                        SizedBox(height: 16),
+                        Center(
+                          child: Text(
+                            'No hay ofertas disponibles',
+                            style: TextStyle(
+                              color: AppColors.slate500,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filteredOffers.length,
-                    itemBuilder: (context, index) {
-                      return _OfferCard(offer: filteredOffers[index]);
-                    },
+                : RefreshIndicator(
+                    onRefresh: () => _load(showLoader: false),
+                    color: AppColors.primary,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filteredOffers.length,
+                      itemBuilder: (context, index) {
+                        return _OfferCard(offer: filteredOffers[index]);
+                      },
+                    ),
                   ),
           ),
         ],
@@ -315,26 +369,43 @@ class _OfferCardState extends State<_OfferCard> {
                         left: 8,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                            horizontal: 10,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.accentGreen,
-                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFE11D48), Color(0xFFF97316)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 4,
+                                color: const Color(0xFF9F1239).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                          child: Text(
-                            '$discount% OFF',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.local_fire_department_rounded,
+                                color: Colors.white,
+                                size: 13,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '$discount% OFF',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

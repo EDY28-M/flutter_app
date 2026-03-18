@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_colors.dart';
 import '../services/store_service.dart';
-import 'store_categories_screen.dart';
+import 'store_catalog_screen.dart';
 
 class StoresListScreen extends StatefulWidget {
   final String? categoryCode;
@@ -79,13 +79,17 @@ class _StoresListScreenState extends State<StoresListScreen> {
                     ],
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _stores.length,
-                  itemBuilder: (context, index) {
-                    final store = _stores[index];
-                    return _StoreListItem(store: store);
-                  },
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: AppColors.primary,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _stores.length,
+                    itemBuilder: (context, index) {
+                      final store = _stores[index];
+                      return _StoreListItem(store: store);
+                    },
+                  ),
                 ),
     );
   }
@@ -103,27 +107,45 @@ class _StoreListItem extends StatelessWidget {
     final categoryName = category?['name'] as String? ?? '';
     final imageUrl = store['image_url'] as String? ?? store['logo_url'] as String?;
     final rating = store['avg_rating'] != null ? (store['avg_rating'] as num).toDouble() : null;
+    final prepTime = (store['prep_time_min'] as num?)?.toInt();
+    final minOrder = (store['min_order_amount'] as num?)?.toDouble();
+    final branchId = (store['branch_id'] as String?) ?? '';
 
     return GestureDetector(
       onTap: () {
+        if (branchId.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Esta tienda no tiene sucursal activa disponible.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => StoreCategoriesScreen(store: store),
+            builder: (_) => StoreCatalogScreen(
+              storeId: store['id'] as String,
+              branchId: branchId,
+              storeName: name,
+            ),
           ),
         );
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.035),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -134,14 +156,14 @@ class _StoreListItem extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 color: Colors.grey.shade100,
               ),
               clipBehavior: Clip.antiAlias,
               child: imageUrl != null && imageUrl.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: imageUrl,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       placeholder: (_, __) => const Center(child: Icon(Icons.store, color: Colors.grey)),
                       errorWidget: (_, __, ___) => const Center(child: Icon(Icons.store, color: Colors.grey)),
                     )
@@ -157,47 +179,93 @@ class _StoreListItem extends StatelessWidget {
                     name,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: AppColors.slate700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          categoryName,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                      if (categoryName.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            categoryName,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
-                      ),
                       if (rating != null) ...[
-                        const SizedBox(width: 8),
-                        Icon(Icons.star, size: 16, color: Colors.amber.shade600),
-                        const SizedBox(width: 2),
-                        Text(
-                          rating.toStringAsFixed(1),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.slate600,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star, size: 14, color: Colors.amber.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
+                      if (prepTime != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '$prepTime min',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0369A1),
+                            ),
+                          ),
+                        ),
+                      if (minOrder != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Min S/ ${minOrder.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF047857),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.slate400),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.slate400),
           ],
         ),
       ),

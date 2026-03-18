@@ -60,6 +60,22 @@ class AuthService {
     await _googleSignIn.signOut();
   }
 
+  static Future<void> markWelcomePopupSeen() async {
+    final current = await user;
+    if (current == null) return;
+
+    final loyalty = current['loyalty'];
+    if (loyalty is! Map<String, dynamic>) return;
+    final popup = loyalty['welcome_popup'];
+    if (popup is! Map<String, dynamic>) return;
+
+    popup['show'] = false;
+    loyalty['welcome_popup'] = popup;
+    current['loyalty'] = loyalty;
+    _user = current;
+    await _storage.write(key: _keyUser, value: jsonEncode(current));
+  }
+
   static Future<Map<String, dynamic>> signInWithGoogle() async {
     final account = await _googleSignIn.signIn();
     if (account == null) throw Exception('Cancelado por el usuario');
